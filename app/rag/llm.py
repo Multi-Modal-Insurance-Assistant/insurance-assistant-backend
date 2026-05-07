@@ -28,17 +28,21 @@ class Answer:
 
 
 def _format_location(meta: dict[str, Any]) -> str:
+    """Build a user-friendly citation anchor.
+
+    PDFs cite by page (stable). DOCX cite by the nearest heading text (or, for
+    preamble content, a short snippet of the paragraph itself) — that's the most
+    actionable string for the user, since they can paste it straight into Word's
+    Find dialog. We deliberately do NOT surface DOCX paragraph indices to the
+    end user: they're meaningless without an anchor and look like noise.
+    """
     page = meta.get("page")
     if page:
         return f"Page {page}"
-    parts: list[str] = []
     section = meta.get("section")
-    paragraph = meta.get("paragraph")
     if section:
-        parts.append(str(section))
-    if paragraph:
-        parts.append(f"Paragraph {paragraph}")
-    return ", ".join(parts) if parts else "Unknown location"
+        return str(section)
+    return "Unknown location"
 
 
 def _format_context(hits: list[Hit]) -> tuple[str, list[Citation]]:

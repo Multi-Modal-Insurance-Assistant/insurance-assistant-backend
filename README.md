@@ -12,7 +12,7 @@ FastAPI backend for the **Secure Multi-Modal Insurance Assistant** challenge. Ha
 | Embeddings   | OpenAI `text-embedding-3-large` (multilingual, 3072d)                                                                |
 | LLM          | OpenAI `gpt-4.1-mini` — non-streaming                                                                                |
 | PDF parsing  | PyMuPDF (`pymupdf`) + Tesseract fallback for scanned pages                                                           |
-| DOCX parsing | `python-docx` (paragraphs + tables; section-aware citations)                                                         |
+| DOCX parsing | `python-docx` (paragraphs + tables in body order; citations anchor on the nearest heading text — Ctrl-F-able in Word) |
 | Image OCR    | `pytesseract` with `eng+vie` language packs                                                                          |
 | Retrieval    | **Hybrid**: BM25 (`rank-bm25`) + cosine, fused via Reciprocal Rank Fusion (top-20, BM25=0.4 / cos=0.6)               |
 | Prompt       | YAML-versioned ([`app/rag/prompts/answer.yaml`](app/rag/prompts/answer.yaml)) — bump `version` when semantics change |
@@ -195,7 +195,7 @@ Each `CitationOut` carries an `index` (1-based) that matches the inline `[#N]` m
 ```json
 {
   "session_id": "ab12...",
-  "answer": "Theft of personal items is covered up to USD 2,000 [#1]. Excluded items: cash [#2].",
+  "answer": "Theft of personal items is covered up to USD 2,000 [#1]. Minimum charter capital for life insurers is VND 600B [#2].",
   "citations": [
     {
       "index": 1,
@@ -206,14 +206,16 @@ Each `CitationOut` carries an `index` (1-based) that matches the inline `[#N]` m
     },
     {
       "index": 2,
-      "file_id": "f0...",
-      "filename": "policy.pdf",
-      "location": "Page 5",
-      "chunk_id": "f0..._4"
+      "file_id": "f1...",
+      "filename": "01_VN_LuatKinhDoanhBaoHiem.docx",
+      "location": "Điều 44 – Vốn điều lệ tối thiểu",
+      "chunk_id": "f1..._12"
     }
   ]
 }
 ```
+
+PDFs cite by page; DOCX cite by nearest heading text (Ctrl-F-able in Word); images cite by filename + the OCR-derived snippet anchor. The frontend chip renders `<filename> — <location>` directly.
 
 Backend filters citations to only those actually referenced in the LLM's answer (so unused retrieved chunks don't leak into the response).
 
@@ -273,7 +275,7 @@ The journey there — `gpt-4o-mini` + emb-3-small + TOP_K=6 + prompt v1 → 78% 
 - **In-memory session store.** Sessions live in process memory; chat history is lost on restart, though Chroma vectors persist on disk and BM25 is rebuilt lazily on first query. For multi-instance deployments, swap `SessionStore` for Redis.
 - **Sync OpenAI calls run in a threadpool.** `chat` uses `run_in_threadpool` so the event loop stays responsive. For high concurrency, switch to `AsyncOpenAI`.
 - **OCR is line-by-line Tesseract.** Good for printed forms; handwriting is out of scope per the spec. For scanned PDFs we render at 200 DPI; for raw images we Lanczos-upscale to ≥2000px on the long edge and pass `--psm 6` (uniform block) — both empirically lift accuracy on posters / ID-card photos / dense table cells where small glyphs default-segment poorly.
-- **DOCX pagination is unstable**, so DOCX citations use `Section <n> (heading)`, `Paragraph <m>` — one of the two formats the evaluator accepts.
+- **DOCX citations anchor on the nearest heading text** (e.g. `policy.docx — "Điều 44 – Vốn điều lệ tối thiểu"`) instead of `Page` or `Section <n>`. DOCX pagination is unstable across renderers and bare ordinals are unactionable; the heading text is something the user can paste into Word's Find dialog and jump straight to. For content that sits before any heading we fall back to a 60-char snippet of the paragraph itself — also Ctrl-F-able. Tables inherit the heading of the section they sit in (no "Table N" labels). The spec accepts this in lieu of stable pagination.
 - **Token optimization.** We embed and store ~800-char chunks rather than full documents. We do _not_ pre-summarize before indexing — that would lose citation fidelity. Per-chat input is capped via `TOP_K=20` and `MAX_HISTORY_TURNS=4`. Total per-chat cost ≈ **$0.003** with current models (≈1,600 chats per $5 OpenAI credit).
 - **Retry policy.** Centralised in `app/rag/retry.py`: 5 attempts × exponential jitter (1s → 16s) **only** on transient errors (5xx, 429, network). Auth/quota/bad-request errors fail fast — no looping.
 - **Prompt versioning.** [`answer.yaml`](app/rag/prompts/answer.yaml) is at **version 3** and carries a `version` field. v3 adds two anti-hallucination rules on top of v2's thoroughness rules: rule 7 (named-entity isolation — don't transfer category facts to a specifically-named plan/article) and rule 8 (no negative claims — never assert the source document "lacks" a topic just because retrieval missed it).
