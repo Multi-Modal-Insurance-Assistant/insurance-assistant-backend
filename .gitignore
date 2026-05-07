@@ -1,0 +1,58 @@
+# =====================================================================
+# insurance-assistant-backend / .gitignore
+# =====================================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+
+# --- Build / packaging ---
+build/
+dist/
+wheels/
+*.whl
+*.tar.gz
+
+# --- Virtual environments (uv-managed) ---
+.venv/
+venv/
+env/
+
+# --- Test / coverage / type-check caches ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.nox/
+
+# --- Local secrets / runtime data ---
+.env
+.env.*
+!.env.example
+data/
+
+# --- One-off scripts (not committed) ---
+scripts/
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Logs / temp ---
+*.log
+logs/
+*.tmp

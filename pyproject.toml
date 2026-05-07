@@ -1,0 +1,52 @@
+[project]
+name = "insurance-assistant-backend"
+version = "0.1.0"
+description = "Secure Multi-Modal Insurance Assistant — FastAPI + Chroma + OpenAI (gpt-4.1-mini, text-embedding-3-large) with hybrid BM25+cosine retrieval and per-session isolation."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "python-multipart>=0.0.18",
+    "pymupdf>=1.24.0",
+    "python-docx>=1.1.0",
+    "pytesseract>=0.3.13",
+    "pillow>=11.0.0",
+    "chromadb>=0.5.20",
+    "openai>=1.50.0",
+    "rank-bm25>=0.2.2",
+    "numpy>=1.26.0",
+    "tenacity>=9.0.0",
+    "pyyaml>=6.0.2",
+]
+
+[project.scripts]
+backend = "app.main:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "httpx>=0.27.0",
+    "ruff>=0.7.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501", "B008"]  # B008: FastAPI uses Depends/File/Cookie in defaults idiomatically
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
