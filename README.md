@@ -104,16 +104,39 @@ sudo apt update
 sudo apt install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-vie
 ```
 
-### 2. Python environment
+### 2. Install `uv` (skip if you already have it)
+
+Check first:
+
+```bash
+uv --version
+```
+
+If `uv: command not found`, install it (no sudo needed — drops a binary in `~/.local/bin`):
+
+```bash
+# macOS / Linux / WSL
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# or via pipx / pip if you prefer
+pipx install uv     # or:  pip install --user uv
+```
+
+Open a new shell (or `source ~/.bashrc` / `~/.zshrc`) so `uv` is on `PATH`, then re-run `uv --version` to confirm. Full docs: <https://docs.astral.sh/uv/getting-started/installation/>.
+
+### 3. Python environment
 
 ```bash
 cd insurance-assistant-backend
 uv sync
 ```
 
-This creates `.venv/` and installs everything in `pyproject.toml`.
+`uv` reads `.python-version` (3.11), downloads that interpreter if needed, creates `.venv/`, and installs everything pinned in `uv.lock`. No separate `python -m venv` step required.
 
-### 3. Environment variables
+### 4. Environment variables
 
 ```bash
 cp .env.example .env
@@ -122,7 +145,7 @@ cp .env.example .env
 
 Get a key from https://platform.openai.com/api-keys.
 
-### 4. Run
+### 5. Run
 
 ```bash
 # Console script (defined in pyproject.toml [project.scripts]):
@@ -135,7 +158,7 @@ uv run python -m app.main
 
 Swagger UI: <http://localhost:8000/docs>
 
-### 5. Run tests
+### 6. Run tests
 
 ```bash
 uv run pytest
