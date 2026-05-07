@@ -44,7 +44,15 @@ def _normalize(text: str) -> str:
 
 
 def chunk_blocks(blocks: list[TextBlock], chunk_size: int, chunk_overlap: int) -> list[Chunk]:
-    """Pack consecutive blocks up to ~chunk_size chars; split blocks individually if they exceed it."""
+    """Pack consecutive blocks up to ~chunk_size chars; split blocks individually if they exceed it.
+
+    Section-aware: a chunk never spans two distinct `section` values. When the
+    incoming block belongs to a different section than what's currently in the
+    buffer, we flush first. Without this, a short heading + intro could pack
+    onto the next heading's content and the chunk would inherit the wrong head
+    section — so a chunk whose body is mostly "Điều 22" would cite "Điều 17".
+    PDFs (where every block has section=None) are unaffected.
+    """
     chunks: list[Chunk] = []
     idx = 0
     buffer: list[TextBlock] = []
@@ -77,6 +85,9 @@ def chunk_blocks(blocks: list[TextBlock], chunk_size: int, chunk_overlap: int) -
         normalized = _normalize(block.text)
         if not normalized:
             continue
+        # Flush at section boundaries so each chunk is wholly inside one section.
+        if buffer and block.section != buffer[0].section:
+            flush()
         if len(normalized) > chunk_size:
             flush()
             for piece in _split_long(normalized, chunk_size, chunk_overlap):

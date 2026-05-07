@@ -12,10 +12,11 @@ FastAPI backend for the **Secure Multi-Modal Insurance Assistant** challenge. Ha
 | Embeddings   | OpenAI `text-embedding-3-large` (multilingual, 3072d)                                                                |
 | LLM          | OpenAI `gpt-4.1-mini` — non-streaming                                                                                |
 | PDF parsing  | PyMuPDF (`pymupdf`) + Tesseract fallback for scanned pages                                                           |
-| DOCX parsing | `python-docx` (paragraphs + tables in body order; citations anchor on the nearest heading text — Ctrl-F-able in Word) |
+| DOCX parsing | `python-docx` (paragraphs + tables walked in body order; citations anchor on the nearest heading text — Ctrl-F-able in Word) |
 | Image OCR    | `pytesseract` with `eng+vie` language packs                                                                          |
+| Chunker      | Pack consecutive blocks up to ~800 chars; **flush at heading boundaries** so a chunk never spans two sections        |
 | Retrieval    | **Hybrid**: BM25 (`rank-bm25`) + cosine, fused via Reciprocal Rank Fusion (top-20, BM25=0.4 / cos=0.6)               |
-| Prompt       | YAML-versioned ([`app/rag/prompts/answer.yaml`](app/rag/prompts/answer.yaml)) — bump `version` when semantics change |
+| Prompt       | YAML-versioned ([`app/rag/prompts/answer.yaml`](app/rag/prompts/answer.yaml), currently **v4**) — bump `version` when semantics change |
 | Retry        | `tenacity` only on transient failures (5xx, 429, network) — fail-fast on auth/quota                                  |
 | Session      | HTTP-only cookie `iasid` → in-memory store + per-session Chroma collection                                           |
 | OCR tuning   | Pre-OCR Lanczos upscale to ≥2000px long edge + Tesseract `--psm 6` (uniform block) for posters / table cells        |
@@ -244,8 +245,8 @@ curl -s -c jar.txt -b jar.txt \
 | PDF / DOCX / Image                                    | `app/ingestion/{pdf,docx,image}.py`                                      |
 | OCR for images (eng + vie)                            | `pytesseract`, configured via `OCR_LANGUAGES`                            |
 | Chunk metadata: filename + page/section + upload date | `app/services/upload_service.py` (Chroma `metadatas`)                    |
-| Context-only answers + citations                      | `app/rag/llm.py` + system prompt **v3** enforces `[#N]` markers          |
-| Anti-hallucination on named entities                  | Prompt rule 7 — never transfer category facts onto a specifically-named plan/article/person |
+| Context-only answers + citations                      | `app/rag/llm.py` + system prompt **v4** enforces `[#N]` markers          |
+| Anti-hallucination on named entities / specific cases | Prompt rule 7 — never transfer general category facts (waiting-period tables, definition lists) onto a specifically-named plan/article/person/case. v4 adds a worked example for case-specific facts (a patient's diagnosis comes from the claim form, not from a general waiting-period list) |
 | Anti-"document lacks X" claims                        | Prompt rule 8 — context is a retrieval subset, never assert the source file lacks a topic |
 | "I don't know" handling                               | Prompt fallback line in EN/VI; backend short-circuits on empty retrieval |
 | Session isolation                                     | `app/api/deps.py` cookie + `app/rag/store.py` per-session collection     |
@@ -256,19 +257,21 @@ curl -s -c jar.txt -b jar.txt \
 
 ## Evaluation
 
-Two manually-judged test suites cover the bar requirements end-to-end (claim documents in suite v1, legal/regulatory + cross-language documents in suite v2). Each suite runs ~59 questions across multiple isolated sessions including dedicated **KB** (knowledge-boundary / hallucination) and **ISO** (cross-session leakage) checks.
+Three manually-judged test suites cover the bar requirements end-to-end across distinct document domains. Each suite runs across multiple isolated sessions including dedicated **KB** (knowledge-boundary / hallucination) and **ISO** (cross-session leakage) checks.
 
-| Suite                   | PASS | PARTIAL | FAIL | Strict % | Lenient % (P + ½·Partial) |
-| ----------------------- | ---- | ------- | ---- | -------- | -------------------------- |
-| v1 — claim docs         | 55   | 4       | 0    | 93.2%    | 96.6%                      |
-| v2 — legal / cross-lang | 54   | 5       | 0    | 91.5%    | 95.8%                      |
-| **Combined (118 Qs)**   | 109  | 9       | 0    | **92.4%**| **96.2%**                  |
+| Suite                                | Docs                                                       | PASS | PARTIAL | FAIL | Strict % | Lenient % (P + ½·Partial) |
+| ------------------------------------ | ---------------------------------------------------------- | ---- | ------- | ---- | -------- | -------------------------- |
+| v1 — claim docs                      | health/auto policy, claim forms, ID cards (VN + EN)        | 55   | 4       | 0    | 93.2%    | 96.6%                      |
+| v2 — legal / regulatory / cross-lang | Insurance Business Law, FAQ, regulatory guide, glossary    | 50   | 9       | 0    | 84.7%    | 93.2%                      |
+| v3 — operational / specialised       | ILP/UL guide, market stats, claims SOP, UW guidelines, fraud infographic, risk framework | 43   | 7       | 0    | 86.0%    | 93.0%                      |
+| **Combined (168 Qs · 28 sessions)**  |                                                            | **148** | **20** | **0** | **88.1%** | **94.0%**           |
 
-- **0 failures** and **0 hallucinations** across all 118 questions
-- KB (anti-hallucination) and ISO (session-isolation) checks pass in both suites
-- The 9 PARTIAL cases hit the main fact correctly but miss a secondary detail in the reference answer (borderline on strict grading)
+- **0 failures** and **0 hallucinations** across all 168 questions on entirely unseen suite-v3 fixtures (no overlap with what tuning was done against)
+- KB (anti-hallucination) checks: **0/13 hallucinations** including the `Diamond Plan` / `VF-Growth 2023` named-entity traps
+- ISO (session-isolation) checks: **9/9** — empty session correctly returns `HTTP 400 no_documents` on any question
+- The 20 PARTIAL cases hit the main fact correctly but miss a secondary detail in the reference answer (borderline on strict grading); none represent an answer-quality regression
 
-The journey there — `gpt-4o-mini` + emb-3-small + TOP_K=6 + prompt v1 → 78% with hallucinations — to the current config is logged in `scripts/test-report-final.md` (gitignored alongside the runners). Each iteration's win is attributable: TOP_K=20 fixed retrieval recall on multi-fact questions, prompt rule 7 fixed the named-entity hallucinations, OCR upscale + PSM=6 fixed phone-number / table-cell misreads.
+The journey there — `gpt-4o-mini` + emb-3-small + TOP_K=6 + prompt v1 → 78 % with hallucinations — to the current config is logged in `scripts/test-report-final.md` (gitignored alongside the runners). Each iteration's win is attributable: TOP_K=20 fixed retrieval recall on multi-fact questions, prompt rules 7+8 fixed the named-entity hallucinations and the "document lacks X" false negatives, the section-aware chunker fixed cross-section citation drift (a chunk whose body was mostly *Điều 22* used to label itself *Điều 17*), and OCR upscale + PSM=6 fixed phone-number / table-cell misreads.
 
 ## Trade-offs and next steps
 
@@ -276,9 +279,10 @@ The journey there — `gpt-4o-mini` + emb-3-small + TOP_K=6 + prompt v1 → 78% 
 - **Sync OpenAI calls run in a threadpool.** `chat` uses `run_in_threadpool` so the event loop stays responsive. For high concurrency, switch to `AsyncOpenAI`.
 - **OCR is line-by-line Tesseract.** Good for printed forms; handwriting is out of scope per the spec. For scanned PDFs we render at 200 DPI; for raw images we Lanczos-upscale to ≥2000px on the long edge and pass `--psm 6` (uniform block) — both empirically lift accuracy on posters / ID-card photos / dense table cells where small glyphs default-segment poorly.
 - **DOCX citations anchor on the nearest heading text** (e.g. `policy.docx — "Điều 44 – Vốn điều lệ tối thiểu"`) instead of `Page` or `Section <n>`. DOCX pagination is unstable across renderers and bare ordinals are unactionable; the heading text is something the user can paste into Word's Find dialog and jump straight to. For content that sits before any heading we fall back to a 60-char snippet of the paragraph itself — also Ctrl-F-able. Tables inherit the heading of the section they sit in (no "Table N" labels). The spec accepts this in lieu of stable pagination.
+- **Section-aware chunking.** The chunker flushes its buffer the moment it sees a block belonging to a different section, so a chunk never spans two distinct headings. Without this, a short heading + intro could pack onto the next heading's content and the chunk would inherit the wrong head section — a chunk whose body is mostly "Điều 22" would cite "Điều 17". PDFs (where every block has `section=None`) are unaffected; the comparison is `None != None` which is False, so packing behaviour is unchanged.
 - **Token optimization.** We embed and store ~800-char chunks rather than full documents. We do _not_ pre-summarize before indexing — that would lose citation fidelity. Per-chat input is capped via `TOP_K=20` and `MAX_HISTORY_TURNS=4`. Total per-chat cost ≈ **$0.003** with current models (≈1,600 chats per $5 OpenAI credit).
 - **Retry policy.** Centralised in `app/rag/retry.py`: 5 attempts × exponential jitter (1s → 16s) **only** on transient errors (5xx, 429, network). Auth/quota/bad-request errors fail fast — no looping.
-- **Prompt versioning.** [`answer.yaml`](app/rag/prompts/answer.yaml) is at **version 3** and carries a `version` field. v3 adds two anti-hallucination rules on top of v2's thoroughness rules: rule 7 (named-entity isolation — don't transfer category facts to a specifically-named plan/article) and rule 8 (no negative claims — never assert the source document "lacks" a topic just because retrieval missed it).
+- **Prompt versioning.** [`answer.yaml`](app/rag/prompts/answer.yaml) is at **version 4** and carries a `version` field. v3 added two anti-hallucination rules on top of v2's thoroughness rules: rule 7 (named-entity isolation — don't transfer category facts to a specifically-named plan/article) and rule 8 (no negative claims — never assert the source document "lacks" a topic just because retrieval missed it). v4 generalises rule 7 with a worked cross-document example: **case-specific facts come from case-specific documents**. The patient's diagnosis is in the claim form; a waiting-period table listing "90 days for cancer" tells you about general policy structure, not about any specific patient's actual condition. This was the difference between a v3 hallucination (`patient diagnosed with cancer`) and the correct v4 answer (`J18.9 viêm phổi` from the claim form chunk) on the same fixtures.
 - **Logging.** Best-effort PII redaction lives in `app/core/logging.py` (`RedactingFormatter`): emails, phone numbers, and 9+ digit IDs are masked in the formatted output before any handler sees them. We never intentionally log prompt or response bodies — only filenames and exception traces — so the redactor is defense in depth, not the primary control. Set `LOG_LEVEL=warning` in production to suppress info-level lines entirely.
 
 ## Security & privacy notes

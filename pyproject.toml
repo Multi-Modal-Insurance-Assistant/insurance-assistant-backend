@@ -1,7 +1,7 @@
 [project]
 name = "insurance-assistant-backend"
 version = "0.1.0"
-description = "Secure Multi-Modal Insurance Assistant — FastAPI + Chroma + OpenAI (gpt-4.1-mini, text-embedding-3-large) with hybrid BM25+cosine retrieval and per-session isolation."
+description = "Secure Multi-Modal Insurance Assistant — FastAPI + Chroma + OpenAI (gpt-4.1-mini, text-embedding-3-large). Hybrid BM25+cosine retrieval with RRF fusion, per-session cookie isolation, section-aware chunker, heading-anchored DOCX citations (Ctrl-F-able), Tesseract OCR (eng+vie) with Lanczos upscale + PSM=6, YAML-versioned prompt with anti-hallucination rules. 0/168 hallucinations across three manually-judged test suites."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
