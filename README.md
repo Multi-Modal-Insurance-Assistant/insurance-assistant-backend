@@ -4,22 +4,22 @@ FastAPI backend for the **Secure Multi-Modal Insurance Assistant** challenge. Ha
 
 ## Stack
 
-| Concern      | Choice                                                                                                               |
-| ------------ | -------------------------------------------------------------------------------------------------------------------- |
-| Runtime      | Python 3.11 + FastAPI + Uvicorn                                                                                      |
-| Pkg manager  | [`uv`](https://docs.astral.sh/uv/)                                                                                   |
-| Vector DB    | Chroma (`PersistentClient`, cosine, **one collection per session**)                                                  |
-| Embeddings   | OpenAI `text-embedding-3-large` (multilingual, 3072d)                                                                |
-| LLM          | OpenAI `gpt-4.1-mini` — non-streaming                                                                                |
-| PDF parsing  | PyMuPDF (`pymupdf`) + Tesseract fallback for scanned pages                                                           |
-| DOCX parsing | `python-docx` (paragraphs + tables walked in body order; citations anchor on the nearest heading text — Ctrl-F-able in Word) |
-| Image OCR    | `pytesseract` with `eng+vie` language packs                                                                          |
-| Chunker      | Pack consecutive blocks up to ~800 chars; **flush at heading boundaries** so a chunk never spans two sections        |
-| Retrieval    | **Hybrid**: BM25 (`rank-bm25`) + cosine, fused via Reciprocal Rank Fusion (top-20, BM25=0.4 / cos=0.6)               |
+| Concern      | Choice                                                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime      | Python 3.11 + FastAPI + Uvicorn                                                                                                        |
+| Pkg manager  | [`uv`](https://docs.astral.sh/uv/)                                                                                                     |
+| Vector DB    | Chroma (`PersistentClient`, cosine, **one collection per session**)                                                                    |
+| Embeddings   | OpenAI `text-embedding-3-large` (multilingual, 3072d)                                                                                  |
+| LLM          | OpenAI `gpt-4.1-mini` — non-streaming                                                                                                  |
+| PDF parsing  | PyMuPDF (`pymupdf`) + Tesseract fallback for scanned pages                                                                             |
+| DOCX parsing | `python-docx` (paragraphs + tables walked in body order; citations anchor on the nearest heading text — Ctrl-F-able in Word)           |
+| Image OCR    | `pytesseract` with `eng+vie` language packs                                                                                            |
+| Chunker      | Pack consecutive blocks up to ~800 chars; **flush at heading boundaries** so a chunk never spans two sections                          |
+| Retrieval    | **Hybrid**: BM25 (`rank-bm25`) + cosine, fused via Reciprocal Rank Fusion (top-20, BM25=0.4 / cos=0.6)                                 |
 | Prompt       | YAML-versioned ([`app/rag/prompts/answer.yaml`](app/rag/prompts/answer.yaml), currently **v4**) — bump `version` when semantics change |
-| Retry        | `tenacity` only on transient failures (5xx, 429, network) — fail-fast on auth/quota                                  |
-| Session      | HTTP-only cookie `iasid` → in-memory store + per-session Chroma collection                                           |
-| OCR tuning   | Pre-OCR Lanczos upscale to ≥2000px long edge + Tesseract `--psm 6` (uniform block) for posters / table cells        |
+| Retry        | `tenacity` only on transient failures (5xx, 429, network) — fail-fast on auth/quota                                                    |
+| Session      | HTTP-only cookie `iasid` → in-memory store + per-session Chroma collection                                                             |
+| OCR tuning   | Pre-OCR Lanczos upscale to ≥2000px long edge + Tesseract `--psm 6` (uniform block) for posters / table cells                           |
 
 ## Project layout
 
@@ -81,16 +81,16 @@ api → services → (models, ingestion, rag) → core
 
 ### Where do I tune X?
 
-| Knob                                               | Lives in                                       | Change via                             |
-| -------------------------------------------------- | ---------------------------------------------- | -------------------------------------- |
-| `OPENAI_API_KEY`, model names                      | `.env` → `app/core/config.py`                  | env / deploy                           |
-| Server host / port / log level / CORS              | `.env` → `app/core/config.py`                  | env / deploy                           |
-| Session TTL, cookie name, OCR languages            | `.env` → `app/core/config.py`                  | env / deploy                           |
-| Max files / size / PDF pages (spec)                | `app/core/config.py` defaults                  | code (env-overridable as escape hatch) |
-| `CHUNK_SIZE`, `CHUNK_OVERLAP`, OCR DPI / upscale / PSM | `app/ingestion/constants.py`               | **code review (PR)**                   |
-| `TOP_K`, `BM25_WEIGHT`, `SEMANTIC_WEIGHT`, `RRF_K` | `app/rag/constants.py`                         | **code review (PR)**                   |
-| LLM temperature / max tokens / history depth       | `app/rag/constants.py`                         | **code review (PR)**                   |
-| System prompt + fallback wording                   | `app/rag/prompts/answer.yaml` (bump `version`) | **code review (PR)**                   |
+| Knob                                                   | Lives in                                       | Change via                             |
+| ------------------------------------------------------ | ---------------------------------------------- | -------------------------------------- |
+| `OPENAI_API_KEY`, model names                          | `.env` → `app/core/config.py`                  | env / deploy                           |
+| Server host / port / log level / CORS                  | `.env` → `app/core/config.py`                  | env / deploy                           |
+| Session TTL, cookie name, OCR languages                | `.env` → `app/core/config.py`                  | env / deploy                           |
+| Max files / size / PDF pages (spec)                    | `app/core/config.py` defaults                  | code (env-overridable as escape hatch) |
+| `CHUNK_SIZE`, `CHUNK_OVERLAP`, OCR DPI / upscale / PSM | `app/ingestion/constants.py`                   | **code review (PR)**                   |
+| `TOP_K`, `BM25_WEIGHT`, `SEMANTIC_WEIGHT`, `RRF_K`     | `app/rag/constants.py`                         | **code review (PR)**                   |
+| LLM temperature / max tokens / history depth           | `app/rag/constants.py`                         | **code review (PR)**                   |
+| System prompt + fallback wording                       | `app/rag/prompts/answer.yaml` (bump `version`) | **code review (PR)**                   |
 
 Rationale: deployment values rotate by environment; algorithmic hyperparameters and prompt wording change retrieval/answer quality and should travel with code + tests.
 
@@ -136,6 +136,10 @@ uv sync
 ```
 
 `uv` reads `.python-version` (3.11), downloads that interpreter if needed, creates `.venv/`, and installs everything pinned in `uv.lock`. No separate `python -m venv` step required.
+
+```bash
+source .venv/bin/activate
+```
 
 ### 4. Environment variables
 
@@ -240,38 +244,38 @@ curl -s -c jar.txt -b jar.txt \
 
 ## How the bar requirements are met
 
-| Requirement                                           | Where                                                                    |
-| ----------------------------------------------------- | ------------------------------------------------------------------------ |
-| PDF / DOCX / Image                                    | `app/ingestion/{pdf,docx,image}.py`                                      |
-| OCR for images (eng + vie)                            | `pytesseract`, configured via `OCR_LANGUAGES`                            |
-| Chunk metadata: filename + page/section + upload date | `app/services/upload_service.py` (Chroma `metadatas`)                    |
-| Context-only answers + citations                      | `app/rag/llm.py` + system prompt **v4** enforces `[#N]` markers          |
+| Requirement                                           | Where                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PDF / DOCX / Image                                    | `app/ingestion/{pdf,docx,image}.py`                                                                                                                                                                                                                                                            |
+| OCR for images (eng + vie)                            | `pytesseract`, configured via `OCR_LANGUAGES`                                                                                                                                                                                                                                                  |
+| Chunk metadata: filename + page/section + upload date | `app/services/upload_service.py` (Chroma `metadatas`)                                                                                                                                                                                                                                          |
+| Context-only answers + citations                      | `app/rag/llm.py` + system prompt **v4** enforces `[#N]` markers                                                                                                                                                                                                                                |
 | Anti-hallucination on named entities / specific cases | Prompt rule 7 — never transfer general category facts (waiting-period tables, definition lists) onto a specifically-named plan/article/person/case. v4 adds a worked example for case-specific facts (a patient's diagnosis comes from the claim form, not from a general waiting-period list) |
-| Anti-"document lacks X" claims                        | Prompt rule 8 — context is a retrieval subset, never assert the source file lacks a topic |
-| "I don't know" handling                               | Prompt fallback line in EN/VI; backend short-circuits on empty retrieval |
-| Session isolation                                     | `app/api/deps.py` cookie + `app/rag/store.py` per-session collection     |
-| Loading state (no streaming)                          | Single response per `/api/v1/chat`; frontend renders spinner             |
-| File limits (2 / 5MB / 20 pages)                      | `app/services/upload_service.py` + `app/ingestion/pdf.py`                |
-| Hybrid search (Senior tie-breaker)                    | `app/rag/retriever.py` (BM25 + cosine, RRF fusion, top-20)               |
-| Type hints (Senior tie-breaker)                       | All modules typed; Pydantic v2 schemas; strict ruff config               |
+| Anti-"document lacks X" claims                        | Prompt rule 8 — context is a retrieval subset, never assert the source file lacks a topic                                                                                                                                                                                                      |
+| "I don't know" handling                               | Prompt fallback line in EN/VI; backend short-circuits on empty retrieval                                                                                                                                                                                                                       |
+| Session isolation                                     | `app/api/deps.py` cookie + `app/rag/store.py` per-session collection                                                                                                                                                                                                                           |
+| Loading state (no streaming)                          | Single response per `/api/v1/chat`; frontend renders spinner                                                                                                                                                                                                                                   |
+| File limits (2 / 5MB / 20 pages)                      | `app/services/upload_service.py` + `app/ingestion/pdf.py`                                                                                                                                                                                                                                      |
+| Hybrid search (Senior tie-breaker)                    | `app/rag/retriever.py` (BM25 + cosine, RRF fusion, top-20)                                                                                                                                                                                                                                     |
+| Type hints (Senior tie-breaker)                       | All modules typed; Pydantic v2 schemas; strict ruff config                                                                                                                                                                                                                                     |
 
 ## Evaluation
 
 Three manually-judged test suites cover the bar requirements end-to-end across distinct document domains. Each suite runs across multiple isolated sessions including dedicated **KB** (knowledge-boundary / hallucination) and **ISO** (cross-session leakage) checks.
 
-| Suite                                | Docs                                                       | PASS | PARTIAL | FAIL | Strict % | Lenient % (P + ½·Partial) |
-| ------------------------------------ | ---------------------------------------------------------- | ---- | ------- | ---- | -------- | -------------------------- |
-| v1 — claim docs                      | health/auto policy, claim forms, ID cards (VN + EN)        | 55   | 4       | 0    | 93.2%    | 96.6%                      |
-| v2 — legal / regulatory / cross-lang | Insurance Business Law, FAQ, regulatory guide, glossary    | 50   | 9       | 0    | 84.7%    | 93.2%                      |
-| v3 — operational / specialised       | ILP/UL guide, market stats, claims SOP, UW guidelines, fraud infographic, risk framework | 43   | 7       | 0    | 86.0%    | 93.0%                      |
-| **Combined (168 Qs · 28 sessions)**  |                                                            | **148** | **20** | **0** | **88.1%** | **94.0%**           |
+| Suite                                | Docs                                                                                     | PASS    | PARTIAL | FAIL  | Strict %  | Lenient % (P + ½·Partial) |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- | ------- | ------- | ----- | --------- | ------------------------- |
+| v1 — claim docs                      | health/auto policy, claim forms, ID cards (VN + EN)                                      | 55      | 4       | 0     | 93.2%     | 96.6%                     |
+| v2 — legal / regulatory / cross-lang | Insurance Business Law, FAQ, regulatory guide, glossary                                  | 50      | 9       | 0     | 84.7%     | 93.2%                     |
+| v3 — operational / specialised       | ILP/UL guide, market stats, claims SOP, UW guidelines, fraud infographic, risk framework | 43      | 7       | 0     | 86.0%     | 93.0%                     |
+| **Combined (168 Qs · 28 sessions)**  |                                                                                          | **148** | **20**  | **0** | **88.1%** | **94.0%**                 |
 
 - **0 failures** and **0 hallucinations** across all 168 questions on entirely unseen suite-v3 fixtures (no overlap with what tuning was done against)
 - KB (anti-hallucination) checks: **0/13 hallucinations** including the `Diamond Plan` / `VF-Growth 2023` named-entity traps
 - ISO (session-isolation) checks: **9/9** — empty session correctly returns `HTTP 400 no_documents` on any question
 - The 20 PARTIAL cases hit the main fact correctly but miss a secondary detail in the reference answer (borderline on strict grading); none represent an answer-quality regression
 
-The journey there — `gpt-4o-mini` + emb-3-small + TOP_K=6 + prompt v1 → 78 % with hallucinations — to the current config is logged in `scripts/test-report-final.md` (gitignored alongside the runners). Each iteration's win is attributable: TOP_K=20 fixed retrieval recall on multi-fact questions, prompt rules 7+8 fixed the named-entity hallucinations and the "document lacks X" false negatives, the section-aware chunker fixed cross-section citation drift (a chunk whose body was mostly *Điều 22* used to label itself *Điều 17*), and OCR upscale + PSM=6 fixed phone-number / table-cell misreads.
+The journey there — `gpt-4o-mini` + emb-3-small + TOP*K=6 + prompt v1 → 78 % with hallucinations — to the current config is logged in `scripts/test-report-final.md` (gitignored alongside the runners). Each iteration's win is attributable: TOP_K=20 fixed retrieval recall on multi-fact questions, prompt rules 7+8 fixed the named-entity hallucinations and the "document lacks X" false negatives, the section-aware chunker fixed cross-section citation drift (a chunk whose body was mostly *Điều 22* used to label itself *Điều 17\_), and OCR upscale + PSM=6 fixed phone-number / table-cell misreads.
 
 ## Trade-offs and next steps
 
